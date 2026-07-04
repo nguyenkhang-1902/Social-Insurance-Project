@@ -1,0 +1,8 @@
+# Bỏ qua môi trường ảo và database
+.venv/
+__pycache__/
+*.db
+*.sqlite
+*.xlsx
+*.csv
+.DS_Store
