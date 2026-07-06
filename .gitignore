@@ -8,5 +8,20 @@ __pycache__/
 *.csv
 .DS_Store
 Code/__pycache__/
+
+# Data/ (app.db) la DB song, tang dan moi thang -> KHONG track bang git.
+# App tu backup truoc moi lan ghi de thang (xem database.py: backup_database_file,
+# goi tu main.py). Backup_AppDB.bat la cong cu thu cong bo sung, khong can Task
+# Scheduler va khong tu xoa backup cu.
 Data/
-Templates/
+
+# Templates/ la file goc BHTN + template bao cao, it doi -> track binh thuong.
+# Override lai 2 pattern *.xlsx/*.csv o tren chi cho rieng thu muc nay.
+!Templates/*.xlsx
+!Templates/*.csv
+
+# Python embeddable (portable runtime) va thu vien offline: qua nang/nhi phan,
+# khong nen track bang git. Dung 1 lan roi copy thu cong khi dong goi.
+python-*-embed-amd64/
+Python_Portable/
+PythonEmbed_Setup/site-packages.zip

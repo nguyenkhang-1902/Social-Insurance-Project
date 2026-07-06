@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+streamlit
+pandas
+SQLAlchemy
+openpyxl
+xlsxwriter
+requests
+numpy
+python-multipart

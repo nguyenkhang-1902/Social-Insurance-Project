@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR / "Code"))
 
-from database import engine, init_db
+from database import DATABASE_PATH, backup_database_file, engine, init_db
 from models import Employee, PayrollHistory
 
 DATA_DIR = ROOT_DIR / "Templates"
@@ -26,7 +26,7 @@ MASTER_FILE_CANDIDATES = [
 
 def parse_date_series(series: pd.Series) -> pd.Series:
     """Parse date series with proper handling of invalid dates.
-    
+
     Returns parsed dates or None for invalid/empty values.
     Explicitly filters out 1970-01-01 dates (often from invalid parsing).
     """
@@ -47,13 +47,13 @@ def parse_date_series(series: pd.Series) -> pd.Series:
 
 def clean_social_date_string(value: object) -> Optional[str]:
     """PHASE 25: Clean social_date by reading as pure string and filtering invalid values.
-    
+
     This function handles the social_date column which may contain:
     - Valid date strings (e.g., '02/04/2026', '2026-04-02')
     - Empty cells
     - NaN/None/null indicators
     - Invalid 1970 dates
-    
+
     Returns:
         - None if the value is invalid, empty, or represents 1970
         - Clean date string if valid (with whitespace stripped)
@@ -61,18 +61,18 @@ def clean_social_date_string(value: object) -> Optional[str]:
     # Handle None and NaN
     if value is None or pd.isna(value):
         return None
-    
+
     # Convert to string and strip whitespace
     text = str(value).strip()
-    
+
     # Filter empty or invalid marker strings
     if not text or text.lower() in {'nan', 'nat', 'none', '', 'n/a', 'na', '<na>'}:
         return None
-    
+
     # Filter 1970 dates in various formats
     if '1970' in text or '01-01' in text.lower() and len(text) < 15:
         return None
-    
+
     # If we have a non-empty string that's not an invalid marker, keep it
     # This preserves date strings in whatever format they came in
     return text
@@ -131,7 +131,7 @@ def parse_salary_value(value: object) -> Optional[float]:
 
     cleaned = text.replace(",", "").replace(" ", "")
     if re.fullmatch(r"-?\d+(\.\d+)?", cleaned):
-        numeric_value = float(cleaned)  
+        numeric_value = float(cleaned)
         return int(numeric_value) if numeric_value.is_integer() else numeric_value
     return None
 
@@ -230,7 +230,7 @@ def load_master_history_dataframe(path: Path) -> pd.DataFrame:
     long_frame["join_date"] = parse_date_series(long_frame.get("join_date", pd.Series(dtype="object")))
     long_frame["birth_date"] = parse_date_series(long_frame.get("birth_date", pd.Series(dtype="object")))
     long_frame["social_no"] = long_frame.get("social_no", pd.Series([None] * len(long_frame), dtype=object)).astype(str).str.strip().replace({"nan": None, "None": None})
-    
+
     # PHASE 25: Read social_date as pure string and clean rigorously
     # This prevents Excel's automatic date conversion from creating 1970 dates
     social_date_raw = long_frame.get("social_date", pd.Series(dtype="object"))
@@ -286,27 +286,35 @@ def build_history_records(long_frame: pd.DataFrame) -> tuple[list[Employee], lis
         saw_valid_value = False
         blank_run_indices = []
         for row_idx, row in emp_frame.iterrows():
+            # NOTE: row_idx here is already the row LABEL within the full
+            # long_frame (iterrows() over a groupby subset preserves the
+            # original labels). It must be used directly with .loc -- indexing
+            # into emp_frame.index[row_idx] instead treats row_idx as a
+            # position within just this employee's subset, which is wrong and
+            # raises IndexError (or silently masks the wrong row) whenever an
+            # employee is not the first group, since their row labels start
+            # well above 0 but the subset itself is much smaller.
             if row["has_value"]:
                 saw_valid_value = True
                 if blank_run_indices:
                     # A new valid value ended the blank run; keep the last blank row as resignation and drop earlier blanks.
                     last_blank_idx = blank_run_indices[-1]
-                    keep_mask.loc[emp_frame.index[last_blank_idx]] = True
+                    keep_mask.loc[last_blank_idx] = True
                     for idx in blank_run_indices[:-1]:
-                        drop_mask.loc[emp_frame.index[idx]] = True
+                        drop_mask.loc[idx] = True
                     blank_run_indices = []
                 continue
 
             if saw_valid_value:
                 blank_run_indices.append(row_idx)
             else:
-                drop_mask.loc[emp_frame.index[row_idx]] = True
+                drop_mask.loc[row_idx] = True
 
         if blank_run_indices:
             last_blank_idx = blank_run_indices[-1]
-            keep_mask.loc[emp_frame.index[last_blank_idx]] = True
+            keep_mask.loc[last_blank_idx] = True
             for idx in blank_run_indices[:-1]:
-                drop_mask.loc[emp_frame.index[idx]] = True
+                drop_mask.loc[idx] = True
 
     long_frame.loc[keep_mask & long_frame["current_blank"], "status"] = "NV"
     long_frame.loc[keep_mask & long_frame["current_blank"], "resign_date"] = long_frame.loc[keep_mask & long_frame["current_blank"], "month"].dt.date
@@ -355,14 +363,14 @@ def build_history_records(long_frame: pd.DataFrame) -> tuple[list[Employee], lis
         salary_value = row.get("current_salary", 0.0)
         if pd.isna(salary_value):
             salary_value = 0.0
-        
+
         # PHASE 25: social_date is now a clean string (or None), not a date object
         social_date_val = row.get("social_date")
         if social_date_val is None or pd.isna(social_date_val):
             social_date_val = None
         else:
             social_date_val = str(social_date_val).strip() or None
-        
+
         employee_records.append(
             Employee(
                 emp_id=normalize_db_value(str(row["emp_id"]), "Unknown"),
@@ -432,6 +440,12 @@ def seed_database() -> None:
 
     long_frame = load_master_history_dataframe(master_path)
     employee_records, history_records = build_history_records(long_frame)
+
+    backup_path = backup_database_file(DATABASE_PATH, DATABASE_PATH.parent / "backups")
+    if backup_path is not None:
+        print(f"Đã backup app.db hiện tại trước khi ghi đè: {backup_path}")
+    else:
+        print("Không có app.db cũ để backup (lần chạy đầu tiên).")
 
     try:
         with Session(engine) as session:

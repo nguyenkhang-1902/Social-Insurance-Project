@@ -14,10 +14,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 try:
-    from .database import engine, init_db
+    from .database import BACKUP_DIR, DATABASE_PATH, backup_database_file, engine, init_db
     from .models import Employee, PayrollHistory
 except ImportError:
-    from database import engine, init_db
+    from database import BACKUP_DIR, DATABASE_PATH, backup_database_file, engine, init_db
     from models import Employee, PayrollHistory
 
 app = FastAPI(title="HR ETL API")
@@ -643,6 +643,17 @@ def _replace_monthly_history(session: Session, *, month: int, year: int) -> int:
     return _delete_monthly_history(session, month=month, year=year)
 
 
+def _should_overwrite_month(*, overwrite: object, existing_count: int) -> bool:
+    """Decide whether to wipe-and-reload the target month.
+
+    Deliberately takes ONLY the explicit `overwrite` flag and the current record
+    count -- never month/year -- so a specific month can never be hardcoded into
+    an always-overwrite bypass again (see project rule: XÓA THÁNG CŨ chỉ được
+    thực hiện khi có yêu cầu overwrite rõ ràng, không hardcode theo tháng/năm).
+    """
+    return str(overwrite).lower() == "true" or existing_count > 0
+
+
 def _coerce_numeric_salary(value: object) -> Optional[float]:
     if value is None:
         return None
@@ -857,8 +868,15 @@ async def upload_monthly_update(
 
     with Session(engine) as session:
         try:
-            should_overwrite = str(overwrite).lower() == "true" or existing_count > 0
-            if should_overwrite or (month == 6 and year == 2026):
+            should_overwrite = _should_overwrite_month(overwrite=overwrite, existing_count=existing_count)
+            if should_overwrite:
+                # Snapshot the whole DB before wiping this month's rows. App has
+                # no ongoing maintenance after handoff, so this must happen
+                # automatically -- it deliberately does NOT delete old backups
+                # (see backup_database_file docstring in database.py).
+                backup_path = backup_database_file(DATABASE_PATH, BACKUP_DIR)
+                if backup_path is not None:
+                    print(f"Đã backup app.db trước khi ghi đè tháng {month:02d}/{year}: {backup_path}")
                 deleted_count = _delete_monthly_history(session, month=month, year=year)
                 current_count = (
                     session.query(PayrollHistory)
@@ -971,8 +989,10 @@ async def upload_monthly_update(
                 )
 
             session.commit()
-            if month == 6 and year == 2026:
-                print("Đã xóa dữ liệu cũ tháng 6. Đã nạp dữ liệu mới + Kế thừa thành công nhân viên cũ từ tháng 5.")
+            if should_overwrite:
+                print(
+                    f"Đã xóa dữ liệu cũ tháng {month:02d}/{year} và nạp dữ liệu mới + kế thừa thành công nhân viên cũ từ tháng trước."
+                )
         except Exception:
             session.rollback()
             raise
@@ -1407,7 +1427,7 @@ def export_report_3(month: Optional[int] = None, year: Optional[int] = None) -> 
     for idx, (history, employee) in enumerate(results, start=1):
         status_value = (history.status_in_month or "Active").strip()
         insurance_values = _calculate_insurance_values(status_value, history.base_salary)
-        
+
         # Clean social_date to remove 1970 dates and invalid values
         social_date_value = _clean_social_date(employee.social_date) if employee is not None else None
 
