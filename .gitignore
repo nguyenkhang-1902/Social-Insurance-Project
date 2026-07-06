@@ -1,8 +1,12 @@
-# Bỏ qua môi trường ảo và database
+# Bỏ qua môi trường ảo, cache và dữ liệu runtime
 .venv/
 __pycache__/
+*.py[cod]
 *.db
 *.sqlite
 *.xlsx
 *.csv
 .DS_Store
+Code/__pycache__/
+Data/
+Templates/
