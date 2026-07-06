@@ -107,7 +107,16 @@ Nếu cần chạy thủ công, có thể thực hiện theo hướng dẫn sau:
 > Lưu ý: Backend và giao diện nên được chạy đồng thời để nút xuất báo cáo hoạt động đúng.
 
 ### 6.3. Môi trường Python
-Dự án có sẵn thư mục Python portable tại [python-3.15.0b3-embed-amd64](python-3.15.0b3-embed-amd64). Nếu máy chưa cài Python hệ thống, có thể dùng thư mục này để chạy chương trình.
+Dự án có sẵn thư mục Python portable tại [python-3.13.14-embed-amd64](python-3.13.14-embed-amd64), đã cài sẵn đầy đủ thư viện cần thiết (fastapi, uvicorn, streamlit, pandas, sqlalchemy, openpyxl, xlsxwriter, requests, numpy, python-multipart) — không cần internet, không cần cài đặt gì thêm. Nếu máy đã có Python hệ thống, `CHAY_CHUONG_TRINH.bat` sẽ ưu tiên dùng Python hệ thống và tự động `pip install -r requirements.txt` nếu thiếu thư viện.
+
+### 6.4. Kiểm tra hệ thống (test tự động)
+Sau khi chạy `CHAY_CHUONG_TRINH.bat` (backend + dashboard đã lên), có thể xác nhận toàn bộ luồng hoạt động đúng bằng một dòng lệnh:
+
+```
+.\python-3.13.14-embed-amd64\python.exe test_system_integrity.py
+```
+
+Bộ test kiểm tra: cổng 8000/8501 phản hồi, upload file tháng mới hoạt động, Report 2/3/4 xuất đúng dữ liệu, cơ chế carry-forward và nhãn trạng thái (TS/OM/KL/ST không bị ghi đè thành "Nghỉ việc"). Test tự tạo dữ liệu giả lập riêng (năm 2099, không đụng đến dữ liệu thật) và tự dọn dẹp sau khi chạy xong. Log chi tiết được ghi vào `Data/test_logs/`.
 
 ---
 
@@ -165,13 +174,17 @@ Sau khi có ảnh, bạn chỉ cần thay đường dẫn trong README thành đ
 
 ```text
 App_BHXH/
-├── Code/                  # code chính của hệ thống
-├── Data/                  # dữ liệu runtime và database
-├── Templates/             # template báo cáo và file mẫu
-├── assets/                # ảnh minh họa cho README
-├── database/              # thư mục dữ liệu liên quan database
-├── CHAY_CHUONG_TRINH.bat  # file chạy nhanh trên Windows
-└── README.md              # tài liệu hướng dẫn
+├── Code/                          # code chính của hệ thống
+├── Data/                          # dữ liệu runtime (app.db) và backups/
+├── Templates/                     # template báo cáo và file mẫu
+├── assets/                        # ảnh minh họa cho README
+├── database/                      # file mẫu tham khảo cho upload
+├── python-3.13.14-embed-amd64/    # Python portable, đã cài sẵn thư viện
+├── CHAY_CHUONG_TRINH.bat          # file chạy nhanh trên Windows
+├── Backup_AppDB.bat               # backup thủ công Data\app.db
+├── requirements.txt                # danh sách thư viện Python cần thiết
+├── test_system_integrity.py       # bộ test tự động kiểm tra toàn hệ thống
+└── README.md                      # tài liệu hướng dẫn
 ```
 
 Dự án được tổ chức như sau:
@@ -191,11 +204,17 @@ Dự án được tổ chức như sau:
 
 - [assets](assets): lưu hình ảnh, ảnh minh họa hoặc tài nguyên phụ trợ.
 
-- [database](database): thư mục lưu trữ dữ liệu liên quan đến database hoặc các file phụ hỗ trợ.
+- [database](database): file Excel mẫu tham khảo cấu trúc dữ liệu upload (không phải dữ liệu vận hành).
 
-- [python-3.15.0b3-embed-amd64](python-3.15.0b3-embed-amd64): Python portable có sẵn trong dự án.
+- [python-3.13.14-embed-amd64](python-3.13.14-embed-amd64): Python portable có sẵn trong dự án, đã cài sẵn đầy đủ thư viện.
 
 - [CHAY_CHUONG_TRINH.bat](CHAY_CHUONG_TRINH.bat): script chạy nhanh trên Windows.
+
+- [Backup_AppDB.bat](Backup_AppDB.bat): công cụ backup thủ công cho `Data\app.db` (ứng dụng cũng tự backup trước mỗi lần ghi đè dữ liệu tháng).
+
+- [requirements.txt](requirements.txt): danh sách thư viện Python cần thiết, dùng khi cài thủ công hoặc khi `CHAY_CHUONG_TRINH.bat` tự động cài bổ sung.
+
+- [test_system_integrity.py](test_system_integrity.py): bộ test tự động kiểm tra kết nối server, upload, và các báo cáo (xem mục 6.4).
 
 ---
 
