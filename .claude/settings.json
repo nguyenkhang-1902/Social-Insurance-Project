@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Read(//mnt/d/Project/App_BHXH_release/**)",
+      "Bash(/mnt/d/Project/App_BHXH/.venv/bin/python -c ' *)",
+      "Bash(git check-ignore *)"
+    ]
+  }
+}
